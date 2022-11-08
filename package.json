@@ -1,0 +1,11 @@
+{
+  "name": "deso-arweave-bundles",
+  "version": "0.1.0",
+  "description": "DeSo Arweave ANS-104 Binary Bundle Library",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jim Toth <jim@artby.city>",
+  "license": "AGPL-3.0-only"
+}
