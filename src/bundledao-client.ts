@@ -1,9 +1,10 @@
 import { Bundle, createData, DataItem, DataItemCreateOptions } from 'arbundles'
-import { longTo32ByteArray } from 'arbundles/src/utils'
 import EthereumSigner from 'arbundles/src/signing/chains/ethereumSigner'
 import Arweave from 'arweave'
 import axios, { AxiosInstance } from 'axios'
 import { Buffer } from 'buffer'
+
+import { longTo32ByteArray } from './util'
 
 export type BundleDAOClientConfig = {
   deso: {
