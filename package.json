@@ -1,6 +1,6 @@
 {
   "name": "@artbycity/bundledao-client",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "BundleDAO Arweave ANS-104 Client",
   "keywords": [
     "arweave",
@@ -10,11 +10,16 @@
   ],
   "author": "Jim Toth <jim@artby.city>",
   "license": "AGPL-3.0-only",
+  "bugs": {
+    "url": "https://gitlab.com/art-by-city/bundledao-client/issues"
+  },
+  "homepage": "https://gitlab.com/art-by-city/bundledao-client#readme",
   "repository": {
     "type": "git",
-    "url": "https://gitlab.com/art-by-city/bundledao-client"
+    "url": "git+https://gitlab.com/art-by-city/bundledao-client.git"
   },
-  "main": "index.js",
+  "private": false,
+  "main": "./dist/index.js",
   "files": [
     "dist/**/*"
   ],
@@ -41,6 +46,7 @@
   "dependencies": {
     "arbundles": "^0.7.0",
     "bip39": "^3.0.4",
+    "buffer": "^6.0.3",
     "elliptic": "^6.5.4",
     "hdkey": "github:deso-protocol/hdkey",
     "sha256": "^0.2.0"

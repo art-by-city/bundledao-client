@@ -5,6 +5,7 @@ import HDKey from 'hdkey'
 import { SignatureConfig, SIG_CONFIG } from 'arbundles/src/constants'
 import { ec as EC } from 'elliptic'
 import { ethers } from 'ethers'
+import { Buffer } from 'buffer'
 
 export default class DeSoSigner extends Secp256k1 {
   readonly ownerLength = SIG_CONFIG[SignatureConfig.ETHEREUM].pubLength

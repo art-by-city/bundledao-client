@@ -3,6 +3,7 @@ import { longTo32ByteArray } from 'arbundles/src/utils'
 import EthereumSigner from 'arbundles/src/signing/chains/ethereumSigner'
 import Arweave from 'arweave'
 import axios, { AxiosInstance } from 'axios'
+import { Buffer } from 'buffer'
 
 export type BundleDAOClientConfig = {
   deso: {
