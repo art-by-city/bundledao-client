@@ -13,7 +13,8 @@ export type BundleDAOClientConfig = {
   bundleDAO: {
     protocol: string,
     host: string,
-    port: number
+    port: number,
+    baseURL?: string
   }
 }
 
@@ -26,7 +27,9 @@ export default class BundleDAOClient {
     this.signer = new EthereumSigner(opts.deso.seedHex)
     const { protocol, host, port } = opts.bundleDAO
     this.arweave = new Arweave({ protocol, host, port })
-    const baseURL = `${protocol}://${host}:${port}`
+    const baseURL = opts.bundleDAO.baseURL
+      ? opts.bundleDAO.baseURL
+      : `${protocol}://${host}:${port}`
     this.api = axios.create({ baseURL })
   }
 
