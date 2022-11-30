@@ -1,15 +1,19 @@
 import { Bundle, createData, DataItem, DataItemCreateOptions } from 'arbundles'
 import { longTo32ByteArray } from 'arbundles/src/utils'
-import EthereumSigner from 'arbundles/src/signing/chains/ethereumSigner'
 import Arweave from 'arweave'
 import axios, { AxiosInstance } from 'axios'
 import { Buffer } from 'buffer'
+import { Signer } from 'arbundles/src/signing'
+import InjectedDeSoSigner from './injected-deso-signer'
 
 export type BundleDAOClientConfig = {
-  deso: {
-    seedHex: string
+  deso?: {
+    seedHex?: string
+    mnemonic?: string
+    identityUrl?: string
   },
-  bundleDAO: {
+  bundleDAO?: { nodeUrl: string },
+  arweave?: {
     protocol: string,
     host: string,
     port: number
@@ -17,28 +21,83 @@ export type BundleDAOClientConfig = {
 }
 
 export default class BundleDAOClient {
-  signer!: EthereumSigner
+  signer!: Signer
   arweave!: Arweave
   api!: AxiosInstance
+  identityUrl!: string
+  useIdentity: boolean = true
 
-  constructor(opts: BundleDAOClientConfig) {
-    this.signer = new EthereumSigner(opts.deso.seedHex)
-    const { protocol, host, port } = opts.bundleDAO
-    this.arweave = new Arweave({ protocol, host, port })
-    const baseURL = `${protocol}://${host}:${port}`
-    this.api = axios.create({ baseURL })
+  constructor(config?: BundleDAOClientConfig) {
+    this.identityUrl = config?.deso?.identityUrl || 'https://identity.deso.org'
+    const arweaveConfig = config?.arweave || {
+      protocol: 'https',
+      host: 'arweave.net',
+      port: 443
+    }
+    this.arweave = new Arweave(arweaveConfig)
+    this.api = axios.create({
+      baseURL: config?.bundleDAO?.nodeUrl || 'https://node.bundledao.io'
+    })
   }
 
-  async getNodePublicKey(): Promise<string> {
-    const { data } = await this.api.get('/derived-key')
+  async connect(opts: {
+    seedHex?: string,
+    mnemonic?: string,
+    useIdentity?: boolean,
+    publicKey?: string,
+    encryptedSeedHex?: string,
+    accessLevel?: number,
+    accessLevelHmac?: string
+  }): Promise<void> {
+    const {
+      seedHex,
+      mnemonic,
+      publicKey,
+      encryptedSeedHex,
+      accessLevel,
+      accessLevelHmac
+    } = opts
 
-    return data
+    let { useIdentity } = opts
+
+    if (!mnemonic && !seedHex) {
+      useIdentity = true
+    }
+
+    if (!useIdentity) {
+      // TODO -> Validate seedHex or mnemonic
+    } else {
+      if (!encryptedSeedHex || !accessLevel || !accessLevelHmac || !publicKey) {
+        throw new Error(
+          'publicKey, encryptedSeedHex, accessLevel, and accessLevelHmac are'
+          + ' required when connecting with DeSo Identity Service'
+        )
+      }
+
+      this.signer = new InjectedDeSoSigner(publicKey, (id, message) => {
+        window.postMessage({
+          id,
+          service: 'identity',
+          method: 'signETH',
+          payload: {
+            unsignedHashes: [ message ],
+            encryptedSeedHex,
+            accessLevel,
+            accessLevelHmac
+          }
+        }, { targetOrigin: this.identityUrl })
+      })
+    }
   }
 
   async createData(
     data: string | Uint8Array,
     opts?: DataItemCreateOptions
   ): Promise<DataItem> {
+    if (!this.signer) {
+      throw new Error('Signer not set: please call connect() first.')
+    }
+
     const dataItem = createData(data, this.signer, {
       ...opts,
       tags: [
@@ -72,10 +131,7 @@ export default class BundleDAOClient {
     return new Bundle(buffer)
   }
 
-  async postBundle(
-    bundle: Bundle,
-    tags?: { name: string, value: string }[]
-  ): Promise<string> {
+  async postBundle(bundle: Bundle): Promise<string> {
     const data = bundle.getRaw()
 
     const { data: txid, status, statusText } = await this.api.post(
