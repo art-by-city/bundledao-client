@@ -15,12 +15,6 @@ import { BundleDAOClient } from '@artbycity/bundledao-client'
 const bundleDAO = new BundleDAOClient({
     deso: {
         seedHex: 'your-deso-seedhex'
-    },
-    // Public Node coming soon!
-    bundleDAO: {
-        protocol: 'http',
-        host: 'localhost',
-        port: 1985
     }
 })
 
