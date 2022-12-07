@@ -1,9 +1,9 @@
 import { SignatureConfig, SIG_CONFIG } from 'arbundles/src/constants'
 import { Signer } from 'arbundles/src/signing'
-import { arrayify, hashMessage } from 'ethers/lib/utils'
 import secp256k1 from 'secp256k1'
 import base64url from 'base64url'
 import { ethers } from 'ethers'
+import { arrayify, hashMessage } from 'ethers/lib/utils'
 
 import { desoPublicKeyToECKeyPair, uuid } from './util'
 
@@ -12,20 +12,32 @@ export default class InjectedDeSoSigner implements Signer {
   readonly signatureLength = SIG_CONFIG[SignatureConfig.ETHEREUM].sigLength
   readonly signatureType = SignatureConfig.ETHEREUM
 
-  private signatureRequestCallback!: (id: string, message: string | Uint8Array) => void
+  private readonly identityUrl!: string
+  private readonly encryptedSeedHex!: string
+  private readonly accessLevelHmac!: string
+  private readonly identityIframe!: HTMLIFrameElement
+  private readonly window!: Window
 
   private readonly _pub!: Buffer
   get publicKey(): Buffer {
     return this._pub
   }
 
-  constructor(
+  constructor(opts: {
     desoPublicKey: string,
-    signatureRequestCallback: (id: string, message: string | Uint8Array) => void
-  ) {
-    const keypair = desoPublicKeyToECKeyPair(desoPublicKey)
+    encryptedSeedHex: string,
+    accessLevelHmac: string,
+    identityUrl: string,
+    identityIframe: HTMLIFrameElement,
+    window: Window
+  }) {
+    const keypair = desoPublicKeyToECKeyPair(opts.desoPublicKey)
     this._pub = Buffer.from(keypair.getPublic().encode('array', false))
-    this.signatureRequestCallback = signatureRequestCallback
+    this.encryptedSeedHex = opts.encryptedSeedHex
+    this.accessLevelHmac = opts.accessLevelHmac
+    this.identityUrl = opts.identityUrl
+    this.identityIframe = opts.identityIframe
+    this.window = opts.window
   }
 
   async sign(message: Uint8Array): Promise<Uint8Array> {
@@ -50,12 +62,22 @@ export default class InjectedDeSoSigner implements Signer {
           } else {
             reject(new Error('[InjectedDeSoSigner] Could not get signature!'))
           }
-          window.removeEventListener('message', handleMessageSignedEvent)
+          this.window.removeEventListener('message', handleMessageSignedEvent)
         }
       }
 
-      window.addEventListener('message', handleMessageSignedEvent)
-      this.signatureRequestCallback(id, arrayify(hashMessage(message)))
+      this.window.addEventListener('message', handleMessageSignedEvent)
+      this.identityIframe.contentWindow!.postMessage({
+        id,
+        service: 'identity',
+        method: 'signETH',
+        payload: {
+          unsignedHashes: [ arrayify(hashMessage(message)) ],
+          accessLevel: 4,
+          encryptedSeedHex: this.encryptedSeedHex,
+          accessLevelHmac: this.accessLevelHmac
+        }
+      }, this.identityUrl)
     })
   }
 

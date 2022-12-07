@@ -1,95 +1,131 @@
 import { Bundle, createData, DataItem, DataItemCreateOptions } from 'arbundles'
-import EthereumSigner from 'arbundles/src/signing/chains/ethereumSigner'
-import Arweave from 'arweave'
 import axios, { AxiosInstance } from 'axios'
 import { Buffer } from 'buffer'
 import { Signer } from 'arbundles/src/signing'
 import InjectedDeSoSigner from './injected-deso-signer'
+import packageJson from '../package.json'
 
 import { longTo32ByteArray } from './util'
 
-export type BundleDAOClientConfig = {
-  deso?: {
-    seedHex?: string
-    mnemonic?: string
-    identityUrl?: string
-  },
-  bundleDAO?: { nodeUrl: string },
-  arweave?: {
-    protocol: string,
-    host: string,
-    port: number,
-    baseURL?: string
+export type Currency = 'deso'
+
+export type DeSoPrivateKey =
+  | { mnemonic: string }
+  | { seedhex: string }
+  | {
+    encryptedSeedHex: string
+    accessLevelHmac: string
+    desoPublicKey: string
   }
+export type PrivateKey = DeSoPrivateKey
+
+export type DeSoConfig = {
+  // seedHex?: string
+  // mnemonic?: string
+  // publicKey?: string
+  // encryptedSeedHex?: string
+  // accessLevelHmac?: string
+  identityUrl: string
+  identityIframe: HTMLIFrameElement | string
+}
+
+const DEFAULT_DESO_CONFIG: DeSoConfig = {
+  identityUrl: 'https://identity.deso.org',
+  identityIframe: 'identity'
+}
+
+export type BundleDAOClientConfig = {
+  nodeUrl: string
+  deso: DeSoConfig
+  window?: Window
+}
+
+const DEFAULT_CONFIG: BundleDAOClientConfig = {
+  nodeUrl: 'https://node.bundledao.io',
+  deso: DEFAULT_DESO_CONFIG
 }
 
 export default class BundleDAOClient {
   signer!: Signer
-  arweave!: Arweave
   api!: AxiosInstance
-  identityUrl!: string
-  useIdentity: boolean = true
+  window!: Window
 
-  constructor(config?: BundleDAOClientConfig) {
-    this.identityUrl = config?.deso?.identityUrl || 'https://identity.deso.org'
-    const arweaveConfig = config?.arweave || {
-      protocol: 'https',
-      host: 'arweave.net',
-      port: 443
-    }
-    this.arweave = new Arweave(arweaveConfig)
-    this.api = axios.create({
-      baseURL: config?.bundleDAO?.nodeUrl || 'https://node.bundledao.io'
-    })
-
+  config!: {
+    deso: Omit<
+      DeSoConfig,
+      'identityIframe'
+    > & { identityIframe: HTMLIFrameElement }
   }
 
-  async connect(opts: {
-    seedHex?: string,
-    mnemonic?: string,
-    useIdentity?: boolean,
-    publicKey?: string,
-    encryptedSeedHex?: string,
-    accessLevel?: number,
-    accessLevelHmac?: string
-  }): Promise<void> {
-    const {
-      seedHex,
-      mnemonic,
-      publicKey,
-      encryptedSeedHex,
-      accessLevel,
-      accessLevelHmac
-    } = opts
+  constructor(
+    currency: Currency = 'deso',
+    privateKey: PrivateKey,
+    config: BundleDAOClientConfig = DEFAULT_CONFIG
+  ) {
+    this.api = axios.create({ baseURL: config.nodeUrl })
 
-    let { useIdentity } = opts
-
-    if (!mnemonic && !seedHex) {
-      useIdentity = true
+    if (config.window) {
+      this.window = config.window
+    } else if (typeof window !== 'undefined') {
+      this.window = window
     }
 
-    if (!useIdentity) {
-      // TODO -> Validate seedHex or mnemonic
+    switch (currency) {
+      case 'deso':
+        this.configDeSo(privateKey, config.deso)
+        break
+      default:
+        throw new Error(`${currency} support is not yet implemented!`)
+    }
+  }
+
+  private configDeSo(
+    privateKey: DeSoPrivateKey,
+    desoConfig: DeSoConfig = DEFAULT_DESO_CONFIG
+  ) {
+    let identityIframe!: HTMLIFrameElement
+    if (typeof desoConfig.identityIframe !== 'string') {
+      identityIframe = desoConfig.identityIframe
     } else {
-      if (!encryptedSeedHex || !accessLevel || !accessLevelHmac || !publicKey) {
+      const iframeById = document.getElementById(desoConfig.identityIframe)
+      if (iframeById) {
+        identityIframe = iframeById as HTMLIFrameElement
+      }
+    }
+
+    this.config = {
+      deso: {
+        ...DEFAULT_DESO_CONFIG,
+        ...desoConfig,
+        identityIframe
+      }
+    }
+
+    if ('mnemonic' in privateKey || 'seedhex' in privateKey) {
+      // TODO -> Validate seedHex or mnemonic
+      console.log('privateKey', privateKey)
+      throw new Error('mnemonic/seedhex signing not yet implemented')
+    } else {
+      const {
+        encryptedSeedHex,
+        accessLevelHmac,
+        desoPublicKey
+      } = privateKey
+
+      if (!encryptedSeedHex || !accessLevelHmac || !desoPublicKey) {
         throw new Error(
-          'publicKey, encryptedSeedHex, accessLevel, and accessLevelHmac are'
-          + ' required when connecting with DeSo Identity Service'
+          'desoPublicKey, encryptedSeedHex, and accessLevelHmac are'
+          + ' required when signing with DeSo Identity Service'
         )
       }
 
-      this.signer = new InjectedDeSoSigner(publicKey, (id, message) => {
-        window.postMessage({
-          id,
-          service: 'identity',
-          method: 'signETH',
-          payload: {
-            unsignedHashes: [ message ],
-            encryptedSeedHex,
-            accessLevel,
-            accessLevelHmac
-          }
-        }, { targetOrigin: this.identityUrl })
+      this.signer = new InjectedDeSoSigner({
+        desoPublicKey,
+        encryptedSeedHex,
+        accessLevelHmac,
+        identityUrl: this.config.deso.identityUrl,
+        identityIframe: this.config.deso.identityIframe,
+        window: this.window
       })
     }
   }
@@ -106,8 +142,8 @@ export default class BundleDAOClient {
       ...opts,
       tags: [
         ...(opts?.tags || []),
-        { name: 'App-Name', value: 'BundleDAO' }, // TODO
-        { name: 'App-Version', value: '0.1.0'} // TODO
+        { name: 'App-Name', value: 'BundleDAO' },
+        { name: 'App-Version', value: packageJson.version }
       ]
     })
     await dataItem.sign(this.signer)
@@ -115,7 +151,7 @@ export default class BundleDAOClient {
     return dataItem
   }
 
-  async createBundle(items: DataItem[]): Promise<Bundle> {
+  createBundle(items: DataItem[]): Bundle {
     const headers = Buffer.alloc(64 * items.length)
     const binaries = items.map((item, index) => {
       const header = Buffer.alloc(64)

@@ -1,4 +1,7 @@
 {
   "mnemonic": "twist fluid involve try decorate purse cream phone movie course iron until",
-  "publicKey": "BC1YLioCEtYLNTTRjvAok9Hkfj8yd1E1LWQ2PSBv1KdbPKKdcvu74aN"
+  "publicKey": "BC1YLioCEtYLNTTRjvAok9Hkfj8yd1E1LWQ2PSBv1KdbPKKdcvu74aN",
+  "seedHex": "8c1a5035d28923932f623b2fba6244b34e4fdfd4277ec21fb057d4a1bd75f021",
+  "encryptedSeedHex": "b814c495128f639d7948e55b79eb5a3343df5e53c46c03147a86aff7ba6f87f1deeaa9edf5f33384716e7b67b1c036fd9ad998adafd741cff30604381e70923f",
+  "accessLevelHmac": "4674f96d3f9f53958094b1ce40d4ad0c3dd82172fb4ba020dbb29bad05dea98c"
 }
