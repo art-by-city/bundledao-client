@@ -11,17 +11,20 @@ $ npm i --save @artbycity/bundledao-client
 Create a `BundleDAOClient`, `Bundle`, and post it to the [BundleDAO Node](https://gitlab.com/art-by-city/bundledao-node)
 ```typescript
 import { BundleDAOClient } from '@artbycity/bundledao-client'
-
-const bundleDAO = new BundleDAOClient({
-    deso: {
-        seedHex: 'your-deso-seedhex'
-    }
-})
+// Get this info from user auth object after log-in with identity service
+const identityServiceSignerInfo = {
+    accessLevelHmac: 'user-access-level-hmac',
+    encryptedSeedHex: 'user-encrypted-seedhex',
+    desoPublicKey: 'user-deso-public-key' // e.g. BC1YLioCEtYLNTTRjvAok9Hkfj8yd1E1LWQ2PSBv1KdbPKKdcvu74aN
+}
+const bundleDAO = new BundleDAOClient('deso', identityServiceSignerInfo)
 
 const data = 'my data' // or Uint8Array
+
+// Add metadata tags to your data
 const tags = [
     { name: 'Content-Type', value: 'text/plain' }, // Content MIME Type for serving
-    { name: 'External-Network', value: 'DESO' },
+    { name: 'External-Network', value: 'deso' },
     { name: 'External-Owner', value: 'my-deso-public-key' }, // Your DeSo Public Key, for discoverability
 ]
 const dataItem = await bundleDAO.createData(data, { tags })

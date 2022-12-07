@@ -5,12 +5,13 @@ import * as bip39 from 'bip39'
 import HDKey from 'hdkey'
 import secp256k1 from 'secp256k1'
 import { ec as EC } from 'elliptic'
+import EthereumSigner from 'arbundles/src/signing/chains/ethereumSigner'
 
 import {
   BundleDAOClient,
   InjectedDeSoSigner
 } from '../../src'
-import { mnemonic } from '../keys/alice.json'
+import { mnemonic, encryptedSeedHex, accessLevelHmac } from '../keys/alice.json'
 import { publicKeyToDeSoPublicKey } from '../../src/util'
 
 chai.use(chaiAsPromised)
@@ -19,145 +20,170 @@ const expect = chai.expect
 const ec = new EC('secp256k1')
 const seed = bip39.mnemonicToSeedSync(mnemonic)
 const hdkeychain = HDKey.fromMasterSeed(seed).derive('m/44\'/0\'/0\'/0/0')
-const seedHex = hdkeychain.privateKey.toString('hex')
-const publicKey = secp256k1.publicKeyCreate(Buffer.from(seedHex, 'hex'), false)
-const keychain = ec.keyFromPrivate(seedHex)
+const seedhex = hdkeychain.privateKey.toString('hex')
+const publicKey = secp256k1.publicKeyCreate(Buffer.from(seedhex, 'hex'), false)
+const keychain = ec.keyFromPrivate(seedhex)
 const desoPublicKey = publicKeyToDeSoPublicKey(keychain)
+const identitySignerKey = { accessLevelHmac, encryptedSeedHex, desoPublicKey }
+
+global.document = {
+  ...global.document,
+  getElementById(id: string): HTMLElement | null {
+    return { id } as HTMLIFrameElement
+  }
+}
+
+global.window = {
+  ...global.window
+}
 
 describe('BundleDAO Client', () => {
   it('constructs with defaults', () => {
-    const client = new BundleDAOClient()
+    const client = new BundleDAOClient('deso', identitySignerKey)
 
-    expect(client.useIdentity).to.be.true
-    expect(client.identityUrl).to.not.be.empty
-    expect(client.arweave.api.config.protocol).to.equal('https')
-    expect(client.arweave.api.config.host).to.equal('arweave.net')
-    expect(client.arweave.api.config.port).to.equal(443)
-    expect(client.api.defaults.baseURL).to.equal('https://node.bundledao.io')
+    expect(client.config.deso.identityUrl).to.not.be.empty
+    // expect(client.api.defaults.baseURL).to.equal('https://node.bundledao.io')
   })
 
-  it('allows custom identity service url to be set', () => {
-    const identityUrl = 'http://localhost:4201'
-    const client = new BundleDAOClient({ deso: { identityUrl } })
-
-    expect(client.identityUrl).to.equal(identityUrl)
-  })
-
-  it('allows custom arweave client config', () => {
-    const arweave = {
-      protocol: 'http',
-      host: 'localhost',
-      port: 1984
-    }
-    const client = new BundleDAOClient({ arweave })
-
-    expect(client.arweave.api.config.protocol).to.equal(arweave.protocol)
-    expect(client.arweave.api.config.host).to.equal(arweave.host)
-    expect(client.arweave.api.config.port).to.equal(arweave.port)
-  })
-
-  it('allows custom bundledao node endpoint', () => {
+  it('allows custom endpoints to be set', () => {
     const nodeUrl = 'http://localhost:1985'
-    const client = new BundleDAOClient({ bundleDAO: { nodeUrl } })
+    const identityUrl = 'http://localhost:4201'
+    const config = {
+      nodeUrl,
+      deso: {
+        identityUrl,
+        identityIframe: 'identity'
+      }
+    }
+    const client = new BundleDAOClient('deso', identitySignerKey, config)
 
     expect(client.api.defaults.baseURL).to.equal(nodeUrl)
+    expect(client.config.deso.identityUrl).to.equal(identityUrl)
   })
 
-  it('requires connect() be called before creating data items', async () => {
-    const client = new BundleDAOClient()
+  it('defaults to standard identity service iframe by id', () => {
+    const client = new BundleDAOClient('deso', identitySignerKey)
 
-    expect(client.createData('test')).to.be.rejected
-    expect(client.createData('test')).to.not.be.rejected
+    expect(client.config.deso.identityIframe).to.not.be.null
+    expect(client.config.deso.identityIframe).to.not.be.undefined
+    expect(client.config.deso.identityIframe.id).to.equal('identity')
   })
 
-  it('requires auth info for connect() with injected deso signer', () => {
-    const encryptedSeedHex = 'test-encrypted-seed-hex'
-    const accessLevel = 4
-    const accessLevelHmac = 'test-access-level-hmac'
-    const client = new BundleDAOClient()
-    const useIdentityOpts = {
-      useIdentity: true,
-      publicKey: desoPublicKey,
-      encryptedSeedHex,
-      accessLevel,
-      accessLevelHmac
+  it('allows passing of identity service iframe by custom id', () => {
+    const identityIframe = 'identity'
+    const config = {
+      nodeUrl: 'http://localhost:1985',
+      deso: {
+        identityUrl: 'http://localhost:4201',
+        identityIframe
+      }
     }
+    const client = new BundleDAOClient('deso', identitySignerKey, config)
 
-    const injectedSigner = async () => {
-      await client.connect(useIdentityOpts)
-
-      return client.signer
-    }
-
-    return Promise.all([
-      expect(client.connect({})).to.be.rejected,
-      expect(client.connect({ encryptedSeedHex })).to.be.rejected,
-      expect(client.connect({ encryptedSeedHex, accessLevel })).to.be.rejected,
-      expect(client.connect({ encryptedSeedHex, accessLevelHmac })).to.be.rejected,
-      expect(client.connect({ accessLevel })).to.be.rejected,
-      expect(client.connect({ accessLevel, accessLevelHmac })).to.be.rejected,
-      expect(client.connect({ accessLevelHmac })).to.be.rejected,
-      expect(client.connect(useIdentityOpts)).to.not.be.rejected,
-      expect(injectedSigner()).to.eventually.be.instanceOf(InjectedDeSoSigner)
-    ])
+    expect(client.config.deso.identityIframe).to.not.be.undefined
+    expect(client.config.deso.identityIframe.id).to.equal(identityIframe)
   })
 
-  // it('creates data items', async () => {
-  //   const client = new BundleDAOClient(opts)
+  it('allows passing of identity service iframe by element reference', () => {
+    const identityIframe = { id: 'identity-iframe' } as HTMLIFrameElement
+    const config = {
+      nodeUrl: 'http://localhost:1985',
+      deso: {
+        identityUrl: 'http://localhost:4201',
+        identityIframe
+      }
+    }
+    const client = new BundleDAOClient('deso', identitySignerKey, config)
 
-  //   const dataItem = await client.createData('test string')
-  //   const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
+    expect(client.config.deso.identityIframe).to.not.be.undefined
+    expect(client.config.deso.identityIframe.id).to.equal(identityIframe.id)
+  })
 
-  //   expect(dataItem.id).to.not.equal(dataItem2.id)
-  //   expect(dataItem.isSigned(), 'data item is not signed').to.be.true
-  //   expect(await dataItem.isValid(), 'data item is not valid').to.be.true
-  //   expect(
-  //     await EthereumSigner.verify(
-  //       Buffer.from(publicKey),
-  //       await dataItem.getSignatureData(),
-  //       dataItem.rawSignature
-  //     ),
-  //     'data item could not be verified'
-  //   ).to.be.true
-  //   expect(dataItem2.isSigned(), 'data item 2 is not signed').to.be.true
-  //   expect(await dataItem2.isValid(), 'data item 2 is not valid').to.be.true
-  //   expect(
-  //     await EthereumSigner.verify(
-  //       Buffer.from(publicKey),
-  //       await dataItem2.getSignatureData(),
-  //       dataItem2.rawSignature
-  //     ),
-  //     'data item 2 could not be verified'
-  //   ).to.be.true
-  // })
+  it('defaults to global window for deso identity service messages', () => {
+    const client = new BundleDAOClient('deso', identitySignerKey)
 
-  // it('creates bundles', async () => {
-  //   const client = new BundleDAOClient(opts)
-  //   const dataItem = await client.createData('test string')
-  //   const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
-  //   const bundle = await client.createBundle([ dataItem, dataItem2 ])
+    expect(client.window).to.not.be.undefined
+  })
 
-  //   const verified = await bundle.verify()
+  it('allows custom window for deso identity service messages', () => {
+    const customWindow = { name: 'custom-window' } as Window
+    const config = {
+      nodeUrl: 'http://localhost:1985',
+      deso: {
+        identityUrl: 'http://localhost:4201',
+        identityIframe: 'identity'
+      },
+      window: customWindow
+    }
+    const client = new BundleDAOClient('deso', identitySignerKey, config)
 
-  //   expect(verified).to.be.true
-  // })
+    expect(client.window).to.not.be.undefined
+    expect(client.window.name).to.equal(customWindow.name)
+  })
 
-  // it('posts bundles', async () => {
-  //   const client = new BundleDAOClient(opts)
-  //   const dataItem = await client.createData('test string')
-  //   const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
-  //   const bundle = await client.createBundle([ dataItem, dataItem2 ])
+  it('TODO -> creates data item with app-version from package.json')
+  it('TODO -> creates data items')//, async () => {
+    // const { window } = new JSDOM('http://localhost:4201', { runScripts: 'dangerously', pretendToBeVisual: true })
+    // const client = new BundleDAOClient({
+    //   deso: {
+    //     identityUrl: 'http://localhost:4201'
+    //   },
+    //   bundleDAO: { nodeUrl: 'http://localhost:1985' }
+    // }, window as unknown as Window)
+    // await client.connect({
+    //   publicKey: desoPublicKey,
+    //   encryptedSeedHex,
+    //   accessLevel: 4,
+    //   accessLevelHmac
+    // })
 
-  //   const bundleTxId = await client.postBundle(bundle)
+    // const dataItem = await client.createData('test string')
+    // const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
 
-  //   expect(bundleTxId).to.not.be.empty
-  // })
+    // expect(dataItem.id).to.not.equal(dataItem2.id)
+    // expect(dataItem.isSigned(), 'data item is not signed').to.be.true
+    // expect(await dataItem.isValid(), 'data item is not valid').to.be.true
+    // expect(
+    //   await EthereumSigner.verify(
+    //     Buffer.from(publicKey),
+    //     await dataItem.getSignatureData(),
+    //     dataItem.rawSignature
+    //   ),
+    //   'data item could not be verified'
+    // ).to.be.true
+    // expect(dataItem2.isSigned(), 'data item 2 is not signed').to.be.true
+    // expect(await dataItem2.isValid(), 'data item 2 is not valid').to.be.true
+    // expect(
+    //   await EthereumSigner.verify(
+    //     Buffer.from(publicKey),
+    //     await dataItem2.getSignatureData(),
+    //     dataItem2.rawSignature
+    //   ),
+    //   'data item 2 could not be verified'
+    // ).to.be.true
+  //}).timeout(5000)
 
-  // it('gets derived key from node', async () => {
-  //   const client = new BundleDAOClient(opts)
+  it('TODO -> creates bundles')//, async () => {
+    // const client = new BundleDAOClient(opts)
+    // const dataItem = await client.createData('test string')
+    // const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
+    // const bundle = await client.createBundle([ dataItem, dataItem2 ])
 
-  //   const nodePublicKey = await client.getNodePublicKey()
+    // const verified = await bundle.verify()
 
-  //   expect(nodePublicKey).to.not.be.empty
-  // })
+    // expect(verified).to.be.true
+  //})
+
+  it('TODO -> posts bundles')//, async () => {
+    // const client = new BundleDAOClient(opts)
+    // const dataItem = await client.createData('test string')
+    // const dataItem2 = await client.createData(`test string 2: ${dataItem.id}`)
+    // const bundle = await client.createBundle([ dataItem, dataItem2 ])
+
+    // const bundleTxId = await client.postBundle(bundle)
+
+    // expect(bundleTxId).to.not.be.empty
+  //})
+  it('TODO -> requires auth info for deso signer (mnemonic/seedhex)')
+  it('TODO -> calcs public key from auth info for deso signer (mnemonic/seedhex)')
 })
