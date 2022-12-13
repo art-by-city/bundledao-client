@@ -57,7 +57,7 @@ describe('BundleDAO Client', () => {
     }
     const client = new BundleDAOClient('deso', identitySignerKey, config)
 
-    expect(client.api.defaults.baseURL).to.equal(nodeUrl)
+    expect(client.config.nodeUrl).to.equal(nodeUrl)
     expect(client.config.deso.identityUrl).to.equal(identityUrl)
   })
 

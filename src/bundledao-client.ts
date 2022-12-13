@@ -1,30 +1,16 @@
 import { Bundle, createData, DataItem, DataItemCreateOptions } from 'arbundles'
-import axios, { AxiosInstance } from 'axios'
 import { Buffer } from 'buffer'
 import { Signer } from 'arbundles/src/signing'
 import InjectedDeSoSigner from './injected-deso-signer'
 import packageJson from '../package.json'
 
 import { longTo32ByteArray } from './util'
+import { DeSoPrivateKey, IdentityServiceDeSoPrivateKey, PrivateKey } from './'
+import BundleDAOAPI from './api'
 
 export type Currency = 'deso'
 
-export type DeSoPrivateKey =
-  | { mnemonic: string }
-  | { seedhex: string }
-  | {
-    encryptedSeedHex: string
-    accessLevelHmac: string
-    desoPublicKey: string
-  }
-export type PrivateKey = DeSoPrivateKey
-
 export type DeSoConfig = {
-  // seedHex?: string
-  // mnemonic?: string
-  // publicKey?: string
-  // encryptedSeedHex?: string
-  // accessLevelHmac?: string
   identityUrl: string
   identityIframe: HTMLIFrameElement | string
 }
@@ -34,36 +20,34 @@ const DEFAULT_DESO_CONFIG: DeSoConfig = {
   identityIframe: 'identity'
 }
 
-export type BundleDAOClientConfig = {
+export type BundleDAOClientUserConfig = {
   nodeUrl: string
   deso: DeSoConfig
   window?: Window
 }
 
-const DEFAULT_CONFIG: BundleDAOClientConfig = {
+export type BundleDAOClientConfig = Omit<BundleDAOClientUserConfig, 'deso'>
+  & {
+    deso: Omit<DeSoConfig, 'identityIframe'>
+      & { identityIframe: HTMLIFrameElement }
+  }
+
+const DEFAULT_CONFIG: BundleDAOClientUserConfig = {
   nodeUrl: 'https://node.bundledao.io',
   deso: DEFAULT_DESO_CONFIG
 }
 
 export default class BundleDAOClient {
   signer!: Signer
-  api!: AxiosInstance
+  api!: BundleDAOAPI
   window!: Window
-
-  config!: {
-    deso: Omit<
-      DeSoConfig,
-      'identityIframe'
-    > & { identityIframe: HTMLIFrameElement }
-  }
+  config!: BundleDAOClientConfig
 
   constructor(
     currency: Currency = 'deso',
     privateKey: PrivateKey,
-    config: BundleDAOClientConfig = DEFAULT_CONFIG
+    config: BundleDAOClientUserConfig = DEFAULT_CONFIG
   ) {
-    this.api = axios.create({ baseURL: config.nodeUrl })
-
     if (config.window) {
       this.window = config.window
     } else if (typeof window !== 'undefined') {
@@ -72,38 +56,44 @@ export default class BundleDAOClient {
 
     switch (currency) {
       case 'deso':
-        this.configDeSo(privateKey, config.deso)
+        this.configDeSo(privateKey, config)
         break
       default:
         throw new Error(`${currency} support is not yet implemented!`)
     }
+
+    this.api = new BundleDAOAPI(
+      privateKey as IdentityServiceDeSoPrivateKey, // TODO -> seedhex/mnemonic
+      this.config,
+      this.window
+    )
   }
 
   private configDeSo(
     privateKey: DeSoPrivateKey,
-    desoConfig: DeSoConfig = DEFAULT_DESO_CONFIG
+    config: BundleDAOClientUserConfig
   ) {
     let identityIframe!: HTMLIFrameElement
-    if (typeof desoConfig.identityIframe !== 'string') {
-      identityIframe = desoConfig.identityIframe
+    if (typeof config.deso.identityIframe !== 'string') {
+      identityIframe = config.deso.identityIframe
     } else {
-      const iframeById = document.getElementById(desoConfig.identityIframe)
+      const iframeById = document.getElementById(config.deso.identityIframe)
       if (iframeById) {
         identityIframe = iframeById as HTMLIFrameElement
       }
     }
 
     this.config = {
+      nodeUrl: config.nodeUrl,
       deso: {
         ...DEFAULT_DESO_CONFIG,
-        ...desoConfig,
+        ...config.deso,
         identityIframe
       }
     }
 
     if ('mnemonic' in privateKey || 'seedhex' in privateKey) {
       // TODO -> Validate seedHex or mnemonic
-      console.log('privateKey', privateKey)
       throw new Error('mnemonic/seedhex signing not yet implemented')
     } else {
       const {
@@ -143,7 +133,7 @@ export default class BundleDAOClient {
       tags: [
         ...(opts?.tags || []),
         { name: 'App-Name', value: 'BundleDAO' },
-        { name: 'App-Version', value: packageJson.version }
+        { name: 'App-Version', value: `client-${packageJson.version}` }
       ]
     })
     await dataItem.sign(this.signer)
@@ -174,10 +164,7 @@ export default class BundleDAOClient {
   async postBundle(bundle: Bundle): Promise<string> {
     const data = bundle.getRaw()
 
-    const { data: txid, status, statusText } = await this.api.post(
-      '/bundle',
-      data
-    )
+    const { txid, status, statusText } = await this.api.postBundle(data)
 
     if ([200, 202].includes(status)) {
       return txid
@@ -188,5 +175,9 @@ export default class BundleDAOClient {
     throw new Error(
       `Failed to submit tx (${status}): ${statusText}`
     )
+  }
+
+  async getBalance(): Promise<{ credit: number, deso: number }> {
+    return await this.api.getBalance()
   }
 }

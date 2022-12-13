@@ -18,14 +18,14 @@
     "type": "git",
     "url": "git+https://gitlab.com/art-by-city/bundledao-client.git"
   },
-  "private": false,
   "main": "./dist/index.js",
   "files": [
     "dist/**/*"
   ],
   "scripts": {
     "build": "rimraf dist && tsc",
-    "test": "mocha test/spec/**/*.ts"
+    "test": "mocha",
+    "version": "npm run build"
   },
   "devDependencies": {
     "@types/bs58check": "^2.1.0",
@@ -34,6 +34,7 @@
     "@types/chai-spies": "^1.0.3",
     "@types/elliptic": "^6.4.14",
     "@types/hdkey": "^2.0.1",
+    "@types/memoizee": "^0.4.8",
     "@types/mocha": "^10.0.0",
     "@types/secp256k1": "^4.0.3",
     "@types/sha256": "^0.2.0",
@@ -51,6 +52,7 @@
     "buffer": "^6.0.3",
     "elliptic": "^6.5.4",
     "hdkey": "github:deso-protocol/hdkey",
+    "memoizee": "^0.4.15",
     "sha256": "^0.2.0"
   }
 }
