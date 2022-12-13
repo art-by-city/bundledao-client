@@ -1,6 +1,6 @@
 {
   "name": "@artbycity/bundledao-client",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "BundleDAO Arweave ANS-104 Client",
   "keywords": [
     "arweave",
