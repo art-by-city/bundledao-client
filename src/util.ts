@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer'
 import { ec as EC } from 'elliptic'
 import bs58check from 'bs58check'
+import memoizee from 'memoizee'
 
 export function longTo32ByteArray(long: number): Uint8Array {
   // we want to represent the input as a 8-bytes array
@@ -81,4 +82,17 @@ export function publicKeyToDeSoPublicKey(publicKey: EC.KeyPair): string {
   const prefix = PUBLIC_KEY_PREFIXES['mainnet'].deso
   const key = publicKey.getPublic().encode('array', true)
   return bs58check.encode(Buffer.from([...prefix, ...key]))
+}
+
+type AnyFunction = ((...args: any) => any)
+export const memoize = (opts: memoizee.Options<AnyFunction>) => (
+  _target: Object,
+  _propertyKey: string | symbol,
+  descriptor: TypedPropertyDescriptor<AnyFunction>
+) => {
+  if (descriptor.value) {
+    descriptor.value = memoizee(descriptor.value, opts)
+  }
+
+  return descriptor
 }
