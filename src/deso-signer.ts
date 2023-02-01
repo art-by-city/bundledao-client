@@ -5,7 +5,9 @@ import HDKey from 'hdkey'
 import { SignatureConfig, SIG_CONFIG } from 'arbundles/src/constants'
 import { ec as EC } from 'elliptic'
 import { ethers } from 'ethers'
+import { arrayify, hashMessage } from 'ethers/lib/utils'
 import { Buffer } from 'buffer'
+import base64url from 'base64url'
 
 export default class DeSoSigner extends Secp256k1 {
   readonly ownerLength = SIG_CONFIG[SignatureConfig.ETHEREUM].pubLength
@@ -28,14 +30,20 @@ export default class DeSoSigner extends Secp256k1 {
   sign(message: Uint8Array): Uint8Array {
     const ec = new EC('secp256k1')
     const keychain = ec.keyFromPrivate(this._key)
-    const signature = keychain.sign(message, { canonical: true })
+    const signature = keychain.sign(arrayify(hashMessage(message)), { canonical: true })
+    const formattedSignature = {
+      r: '0x' + signature.r.toString(16),
+      s: '0x' + signature.s.toString(16),
+      v: signature.recoveryParam || 0,
+    }
+    console.log('SIGNATURE', formattedSignature)
     const joinedSignature = ethers.utils.joinSignature({
-      recoveryParam: signature.recoveryParam || undefined,
-      r: ethers.utils.hexZeroPad('0x' + signature.r.toString(16), 32),
-      s: ethers.utils.hexZeroPad('0x' + signature.s.toString(16), 32),
+      r: ethers.utils.hexZeroPad(formattedSignature.r, 32),
+      s: ethers.utils.hexZeroPad(formattedSignature.s, 32),
+      recoveryParam: formattedSignature.v
     })
 
-    return Buffer.from(joinedSignature.substring(2), 'hex')
+    return Buffer.from(joinedSignature.slice(2), 'hex')
   }
 
   static async verify(
@@ -43,19 +51,12 @@ export default class DeSoSigner extends Secp256k1 {
     message: Uint8Array,
     signature: Uint8Array
   ): Promise<boolean> {
-    let verified = false
+    const msg = arrayify(hashMessage(message))
 
-    try {
-      const ec = new EC('secp256k1')
-      const keychain = ec.keyFromPublic(pk)
-      const sigBuffer = Buffer.from(signature)
-      const m = sigBuffer.toString('hex').match(/([a-f\d]{64})/gi)
-
-      if (m !== null) {
-        verified = keychain.verify(message, { r: m[0], s: m[1] })
-      }
-    } catch (e) {}
-
-    return verified
+    return secp256k1.ecdsaVerify(
+      (signature.length === 65) ? signature.slice(0, -1) : signature,
+      msg,
+      (typeof pk === 'string') ? base64url.toBuffer(pk) : pk,
+    )
   }
 }
