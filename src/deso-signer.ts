@@ -36,7 +36,6 @@ export default class DeSoSigner extends Secp256k1 {
       s: '0x' + signature.s.toString(16),
       v: signature.recoveryParam || 0,
     }
-    console.log('SIGNATURE', formattedSignature)
     const joinedSignature = ethers.utils.joinSignature({
       r: ethers.utils.hexZeroPad(formattedSignature.r, 32),
       s: ethers.utils.hexZeroPad(formattedSignature.s, 32),
